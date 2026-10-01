@@ -1,13 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f2f2f2;
-  background: #050607;
+  background: #000;
 }
 
 * { box-sizing: border-box; }
-html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { background: #050607; }
-canvas { display: block; width: 100%; height: 100%; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050607; }
+
+canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* Capa de Decoración Fotográfica de Fondo */
+.photo-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Reemplaza con la ruta de tu foto de decoración */
+  background-image: url('./img/decoracion.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.18; /* Sutil y elegante para no tapar las partículas */
+  mix-blend-mode: luminosity; /* Estética clínica / radiografía */
+  pointer-events: none;
+  z-index: 1;
+}
 
 .panel {
   position: fixed;
@@ -19,28 +35,28 @@ canvas { display: block; width: 100%; height: 100%; }
   padding: 14px;
   border: 1px solid rgba(255,255,255,.16);
   border-radius: 12px;
-  background: rgba(8, 10, 12, .86);
+  background: rgba(8, 10, 12, .88);
   backdrop-filter: blur(12px);
   z-index: 10;
 }
 
-.panel h1 { font-size: 16px; margin: 0 0 4px; }
-.panel h2 { font-size: 12px; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: .08em; opacity: .72; }
-.panel p, .panel li { font-size: 12px; line-height: 1.4; color: #c9cdd2; }
-.panel .row { margin: 8px 0; }
-.panel label { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.panel h1 { font-size: 15px; margin: 0 0 4px; color: #ff3355; }
+.panel h2 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+.panel p { font-size: 11px; line-height: 1.4; color: #c9cdd2; }
+.panel .row { margin: 6px 0; }
+.panel label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
 .panel input[type="range"] { width: 100%; }
-.panel input[type="checkbox"] { transform: translateY(1px); }
-.panel button, .panel select {
+.panel button {
   width: 100%;
   margin-top: 6px;
-  padding: 8px 10px;
+  padding: 8px;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(255,255,255,.08);
   color: inherit;
+  cursor: pointer;
 }
-.panel button:hover { background: rgba(255,255,255,.14); }
+.panel button:hover { background: rgba(255,255,255,.15); }
 .panel .value { font-variant-numeric: tabular-nums; opacity: .85; }
 .panel .group { padding-top: 4px; border-top: 1px solid rgba(255,255,255,.08); }
 .panel.hidden { display: none; }
@@ -50,12 +66,42 @@ canvas { display: block; width: 100%; height: 100%; }
   right: 14px;
   bottom: 14px;
   z-index: 9;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: 9px;
-  background: rgba(8,10,12,.7);
+  background: rgba(8,10,12,.75);
   font-size: 11px;
   color: #d8dce0;
-  line-height: 1.45;
   pointer-events: none;
 }
 .hud strong { color: white; }
+
+.narrative-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.lyrics-text {
+  position: absolute;
+  font-family: 'Anton', Impact, sans-serif;
+  text-transform: uppercase;
+  font-size: 56px;
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 25px rgba(0,0,0,0.95);
+  text-align: center;
+  max-width: 1200px;
+  padding: 0 40px;
+  transition: opacity 0.2s ease;
+  opacity: 0;
+}
+
+.lyrics-text.visible {
+  opacity: 1;
+}

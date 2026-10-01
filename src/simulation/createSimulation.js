@@ -1,29 +1,13 @@
 import * as THREE from 'three/webgpu';
-import {
-  Fn,
-  If,
-  color,
-  hash,
-  instanceIndex,
-  instancedArray,
-  max,
-  mix,
-  mod,
-  step,
-  uint,
-  uv,
-  vec3,
-  vec4
-} from 'three/tsl';
+import { Fn, If, color, hash, instanceIndex, instancedArray, max, mix, sin, cos, step, uint, uv, vec3, vec4 } from 'three/tsl';
 
-export function createSimulation({ renderer, scene, params, count = 131072 }) {
-  // STATE -----------------------------------------------------------------
-  // Each particle owns position and velocity. The arrays live in GPU storage.
+export function createSimulation({ renderer, scene, params, count = 2048 }) {
   const positionBuffer = instancedArray(count, 'vec3');
   const velocityBuffer = instancedArray(count, 'vec3');
 
-  // INITIALIZATION --------------------------------------------------------
-  // A compute pass writes the initial state for every particle in parallel.
+  const BOUNDS_W = 24.0;
+  const BOUNDS_H = 13.5;
+
   const initParticles = Fn(() => {
     const i = instanceIndex;
     const p = positionBuffer.element(i);
@@ -36,13 +20,10 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const r5 = hash(i.add(uint(71)));
     const r6 = hash(i.add(uint(89)));
 
-    p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsSize.mul(0.45)));
+    p.assign(vec3(r1.sub(0.5).mul(BOUNDS_W), r2.sub(0.5).mul(BOUNDS_H), r3.sub(0.5).mul(4.0)));
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
-  })().compute(count).setName('Initialize Particles');
+  })().compute(count).setName('Initialize Agents');
 
-  // UPDATE / COMPUTE SHADER ----------------------------------------------
-  // This is the conceptual heart of the project:
-  // state -> forces -> acceleration -> velocity -> position.
   const updateParticles = Fn(() => {
     const p = positionBuffer.element(instanceIndex);
     const v = velocityBuffer.element(instanceIndex);
@@ -50,29 +31,22 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const dt = params.dt.mul(params.timeScale);
     const force = vec3(0.0).toVar();
 
-    // 1) CONSTANT / WIND FORCE
-    force.addAssign(params.wind.mul(params.windEnabled));
+    const angleX = sin(p.y.mul(0.3)).mul(cos(p.z.mul(0.3)));
+    const angleY = cos(p.x.mul(0.3)).mul(sin(p.z.mul(0.3)));
+    const flowDirection = vec3(angleX, angleY, 0.0).normalize();
+    force.addAssign(flowDirection.mul(params.flowStrength));
 
-    // 2) RADIAL FORCE (positive = attraction, negative = repulsion)
     const toAttractor = params.attractor.sub(p);
     const distance = max(toAttractor.length(), params.softening);
-    const radialDirection = toAttractor.div(distance);
-    const radialForce = radialDirection
-      .mul(params.radialStrength)
-      .div(distance.pow(2))
-      .mul(params.radialEnabled);
-    force.addAssign(radialForce);
+    const steeringForce = toAttractor.div(distance).mul(params.radialStrength).mul(params.radialEnabled);
+    force.addAssign(steeringForce);
 
-    // 3) VORTEX FORCE: tangent to the radial direction around Z.
     const zAxis = vec3(0.0, 0.0, 1.0);
-    const tangent = zAxis.cross(radialDirection);
+    const tangent = zAxis.cross(toAttractor.normalize());
     force.addAssign(tangent.mul(params.vortexStrength).mul(params.vortexEnabled));
 
-    // 4) LINEAR DRAG: F = -c v
     force.addAssign(v.mul(params.dragCoefficient).mul(params.dragEnabled).mul(-1.0));
 
-    // INTEGRATION ---------------------------------------------------------
-    // Unit mass: a = F. Semi-implicit Euler: update v, then p.
     v.addAssign(force.mul(dt));
 
     const speed = v.length();
@@ -82,13 +56,15 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
 
     p.addAssign(v.mul(dt));
 
-    // Periodic boundary conditions: particles leaving one side re-enter.
-    const half = params.boundsSize.mul(0.5);
-    p.assign(mod(p.add(half), params.boundsSize).sub(half));
-  })().compute(count).setName('Update Particles');
+    const halfW = BOUNDS_W * 0.5;
+    const halfH = BOUNDS_H * 0.5;
 
-  // RENDER ---------------------------------------------------------------
-  // Rendering does not recompute the physics. It consumes the GPU state.
+    If(p.x.greaterThan(halfW), () => { p.x.assign(p.x.sub(BOUNDS_W)); });
+    If(p.x.lessThan(-halfW), () => { p.x.assign(p.x.add(BOUNDS_W)); });
+    If(p.y.greaterThan(halfH), () => { p.y.assign(p.y.sub(BOUNDS_H)); });
+    If(p.y.lessThan(-halfH), () => { p.y.assign(p.y.add(BOUNDS_H)); });
+  })().compute(count).setName('Update Agent Behaviors');
+
   const material = new THREE.SpriteNodeMaterial({
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -101,39 +77,21 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   material.colorNode = Fn(() => {
     const speed = velocityBuffer.toAttribute().length();
     const t = speed.div(params.maxSpeed).clamp(0.0, 1.0);
-    const slow = color('#46a6ff');
-    const fast = color('#ffb35a');
+    const slow = color('#ff1a40');
+    const fast = color('#ffffff');
     return vec4(mix(slow, fast, t), 1.0);
   })();
 
-  // Circular sprite mask, avoiding visible square planes.
-  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5);
+  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5).mul(0.8);
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   mesh.frustumCulled = false;
   scene.add(mesh);
 
-  function reset() {
-    renderer.compute(initParticles);
-  }
+  function reset() { renderer.compute(initParticles); }
+  function stepSimulation() { renderer.compute(updateParticles); }
+  function dispose() { geometry.dispose(); material.dispose(); scene.remove(mesh); }
 
-  function stepSimulation() {
-    renderer.compute(updateParticles);
-  }
-
-  function dispose() {
-    geometry.dispose();
-    material.dispose();
-    scene.remove(mesh);
-  }
-
-  return {
-    count,
-    positionBuffer,
-    velocityBuffer,
-    reset,
-    stepSimulation,
-    dispose
-  };
+  return { count, positionBuffer, velocityBuffer, reset, stepSimulation, dispose };
 }

@@ -5,10 +5,13 @@ import './styles.css';
 import songUrl from './CANCION/CIRUGIA.mp3';
 
 import { createParameters } from './simulation/parameters.js';
-import { createSimulation } from './simulation/createSimulation.js';
+import { createSimulation, createPhysarum } from './simulation/createSimulation.js';
+import { createScar } from './simulation/createScar.js';
 import { createLabPanel } from './ui/labPanel.js';
 
 const PARTICLE_COUNT = 1536;
+const SCAR_PARTICLE_COUNT = 3400;
+const PHYSARUM_AGENT_COUNT = 32768;
 
 async function main() {
   const mount = document.querySelector('#app');
@@ -33,6 +36,18 @@ async function main() {
 
   const params = createParameters();
   const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
+  const scar = createScar({ renderer, scene, params, count: SCAR_PARTICLE_COUNT });
+  const physarum = createPhysarum({ renderer, scene, params, count: PHYSARUM_AGENT_COUNT });
+
+  // Escena activa: 'tissue' (enjambre 1/2/3), 'scar' (tecla 4) o 'physarum' (tecla 5)
+  let activeScene = 'tissue';
+  function setScene(name) {
+    activeScene = name;
+    simulation.setActive(name === 'tissue');
+    scar.setActive(name === 'scar');
+    physarum.setActive(name === 'physarum');
+  }
+  setScene('tissue');
 
   const audio = new Audio(songUrl);
 
@@ -54,49 +69,32 @@ async function main() {
   hud.className = 'hud';
   let currentTissueMode = "1. Sutura Celular";
   function updateHudText() {
-    hud.innerHTML = `<strong>INSTRUMENTO</strong> · <strong>WASD</strong>: Bisturí · <strong>Modo [1/2/3]</strong>: <span style="color:#ff3355">${currentTissueMode}</span> · <strong>M</strong>: Música · <strong>P</strong>: Panel`;
+    hud.innerHTML = `<strong>INSTRUMENTO</strong> · <strong>WASD</strong>: Bisturí · <strong>Modo [1-5]</strong>: <span style="color:#ff3355">${currentTissueMode}</span> · <strong>M</strong>: Música · <strong>Z/X/C</strong>: Letra · <strong>P</strong>: Panel`;
   }
   document.body.append(hud);
   updateHudText();
 
-  // Línea de tiempo exacta con la letra solicitada
-  const LYRICS_TIMELINE = [
-    { start: 53.0, end: 54.5, text: "POR VOS", size: "72px", effect: 'none' },
-    { start: 55.0, end: 57.0, text: "VOY EN MISIÓN SUICIDA", size: "64px", effect: 'invert' },
+  // La letra la dispara el intérprete (mantener la tecla), no el reloj de la canción
+  const LYRIC_KEYS = {
+    KeyZ: { text: "POR VOS", size: "72px", effect: 'none' },
+    KeyX: { text: "VOY EN MISIÓN SUICIDA", size: "80px", effect: 'invert' },
+    KeyC: { text: "PIERDE VALOR LA VIDA CUANDO NO SOY TU DIVERSIÓN", size: "42px", effect: 'none' }
+  };
 
-    { start: 136.0, end: 138.0, text: "POR VOS", size: "72px", effect: 'none' },
-    { start: 138.0, end: 141.0, text: "VOY EN MISIÓN SUICIDA", size: "80px", effect: 'invert' },
-    { start: 142.0, end: 147.0, text: "PIERDE VALOR LA VIDA CUANDO NO SOY TU DIVERSIÓN", size: "42px", effect: 'none' }
-  ];
-
-  function updateNarrativeScore(currentTime) {
-    document.body.style.filter = 'none';
-    lyricsBox.style.fontSize = "56px";
-    let activeText = "";
-
-    const currentFrame = LYRICS_TIMELINE.find(
-      (clip) => currentTime >= clip.start && currentTime < clip.end
-    );
-
-    if (currentFrame) {
-      activeText = currentFrame.text;
-
-      if (currentFrame.effect === 'invert') {
-        document.body.style.filter = 'invert(1)';
-      }
-
-      if (currentFrame.size) {
-        lyricsBox.style.fontSize = currentFrame.size;
-      }
-    }
-
-    if (activeText !== "") {
-      lyricsBox.textContent = activeText;
-      lyricsBox.classList.add('visible');
-    } else {
-      lyricsBox.classList.remove('visible');
-    }
+  function showLyric(clip) {
+    lyricsBox.textContent = clip.text;
+    lyricsBox.style.fontSize = clip.size;
+    lyricsBox.classList.add('visible');
+    document.body.style.filter = clip.effect === 'invert' ? 'invert(1)' : 'none';
   }
+
+  function hideLyric() {
+    lyricsBox.classList.remove('visible');
+    document.body.style.filter = 'none';
+  }
+
+  // bioMode (1/2/3) se interpola hacia su objetivo para que los cambios de modo sean un morph
+  let bioTarget = 1.0;
 
   const keyboardPos = new THREE.Vector3(0, 0, 0);
   const moveSpeed = 0.2;
@@ -107,23 +105,39 @@ async function main() {
     keys[e.code] = true;
 
     if (e.key === '1' || e.code === 'Digit1') {
-      params.bioMode.value = 1.0;
+      bioTarget = 1.0;
+      setScene('tissue');
       currentTissueMode = "1. Sutura Celular";
       updateHudText();
     }
     if (e.key === '2' || e.code === 'Digit2') {
-      params.bioMode.value = 2.0;
+      bioTarget = 2.0;
+      setScene('tissue');
       currentTissueMode = "2. Hemorragia / Vórtice";
       updateHudText();
     }
     if (e.key === '3' || e.code === 'Digit3') {
-      params.bioMode.value = 3.0;
+      bioTarget = 3.0;
+      setScene('tissue');
       currentTissueMode = "3. Disección Estructural";
+      updateHudText();
+    }
+    if (e.key === '4' || e.code === 'Digit4') {
+      setScene('scar');
+      currentTissueMode = "4. Cicatriz";
+      updateHudText();
+    }
+
+    if (e.key === '5' || e.code === 'Digit5') {
+      setScene('physarum');
+      currentTissueMode = "5. Physarum / Venas";
       updateHudText();
     }
 
     if (e.repeat) return;
-    
+
+    if (LYRIC_KEYS[e.code]) showLyric(LYRIC_KEYS[e.code]);
+
     if (e.code === 'KeyM') {
       if (audio.paused) {
         audio.play().catch(err => console.log("Audio error:", err));
@@ -135,12 +149,13 @@ async function main() {
       const panelEl = document.querySelector('.panel');
       if (panelEl) panelEl.classList.toggle('hidden');
     }
-    if (e.code === 'KeyR') simulation.reset();
+    if (e.code === 'KeyR') { simulation.reset(); scar.reset(); physarum.reset(); }
   });
 
   addEventListener('keyup', (e) => {
     keys[e.key] = false;
     keys[e.code] = false;
+    if (LYRIC_KEYS[e.code]) hideLyric();
   });
 
   function updateKeyboardAttractor() {
@@ -149,7 +164,8 @@ async function main() {
     if (keys['KeyA'] || keys['ArrowLeft']) keyboardPos.x -= moveSpeed;
     if (keys['KeyD'] || keys['ArrowRight']) keyboardPos.x += moveSpeed;
 
-    keyboardPos.clampScalar(-9.0, 9.0);
+    keyboardPos.x = Math.max(-8.3, Math.min(8.3, keyboardPos.x));
+    keyboardPos.y = Math.max(-4.6, Math.min(4.6, keyboardPos.y));
     params.attractor.value.copy(keyboardPos);
   }
 
@@ -158,7 +174,7 @@ async function main() {
 
   const panel = createLabPanel({
     params,
-    onReset: () => simulation.reset(),
+    onReset: () => { simulation.reset(); scar.reset(); physarum.reset(); },
     onModeChange: () => {
       panelVisible = !panelVisible;
       panel.setVisible(panelVisible);
@@ -173,14 +189,17 @@ async function main() {
   });
 
   simulation.reset();
+  scar.reset();
+  physarum.reset();
 
   renderer.setAnimationLoop(() => {
     if (!paused) {
       updateKeyboardAttractor();
-      simulation.stepSimulation();
-      if (!audio.paused) {
-        updateNarrativeScore(audio.currentTime);
-      }
+      params.time.value += params.dt.value * params.timeScale.value;
+      params.bioMode.value += (bioTarget - params.bioMode.value) * 0.08;
+      if (activeScene === 'scar') scar.stepSimulation();
+      else if (activeScene === 'physarum') physarum.stepSimulation();
+      else simulation.stepSimulation();
     }
     renderer.render(scene, camera);
   });

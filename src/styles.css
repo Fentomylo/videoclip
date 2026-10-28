@@ -4,63 +4,138 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f2f2f2;
   background: #000;
+  --blood: #ff1a40;
+  --blood-soft: #ff3355;
 }
 
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050607; }
 
-canvas { display: block; width: 100% !important; height: 100% !important; }
+canvas { display: block; width: 100% !important; height: 100% !important; cursor: crosshair; }
 
-/* Capa de Decoración Fotográfica de Fondo */
-.photo-backdrop {
+/* ---------- Grano de película (textura clínica / analógica) ---------- */
+.grain {
   position: fixed;
-  inset: 0;
-  /* Reemplaza con la ruta de tu foto de decoración */
-  background-image: url('./img/decoracion.jpg');
-  background-size: cover;
-  background-position: center;
-  opacity: 0.18; /* Sutil y elegante para no tapar las partículas */
-  mix-blend-mode: luminosity; /* Estética clínica / radiografía */
+  inset: -50%;
+  width: 200%;
+  height: 200%;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain-shift 0.9s steps(6) infinite;
+}
+@keyframes grain-shift {
+  0%   { transform: translate(0, 0); }
+  17%  { transform: translate(-4%, 3%); }
+  34%  { transform: translate(3%, -5%); }
+  51%  { transform: translate(-6%, -2%); }
+  68%  { transform: translate(5%, 4%); }
+  85%  { transform: translate(-2%, 6%); }
+  100% { transform: translate(0, 0); }
 }
 
+/* ---------- Viñeta: oscurece los bordes y tiñe de sangre el centro ---------- */
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background:
+    radial-gradient(ellipse at center, rgba(120, 0, 20, 0.10) 0%, rgba(0, 0, 0, 0) 45%),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+/* ---------- TURBIO (tecla T): todos los instrumentos a la vez, pantalla "sucia" ---------- */
+.turbio canvas { animation: murk-hue 7s ease-in-out infinite, murk-shake .22s steps(2) infinite; }
+.turbio .grain { opacity: .17; }
+.turbio .vignette {
+  background:
+    radial-gradient(ellipse at center, rgba(160, 0, 28, 0.22) 0%, rgba(0, 0, 0, 0) 55%),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 38%, rgba(0, 0, 0, 0.88) 100%);
+}
+@keyframes murk-hue {
+  0%, 100% { filter: contrast(1.18) saturate(1.3) hue-rotate(-6deg) brightness(1.02); }
+  50%      { filter: contrast(1.3)  saturate(1.5) hue-rotate(7deg)  brightness(0.94); }
+}
+@keyframes murk-shake {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(1.5px, -1px); }
+  100% { transform: translate(-1px, 1.5px); }
+}
+
+/* ---------- FLORES (tecla 6): paleta viva que contrasta con el resto ---------- */
+.flores .vignette {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(22, 0, 8, 0.55) 100%);
+}
+.flores .grain { opacity: 0.10; }   /* grano de película sobre la niebla */
+
+/* ---------- Botón fijo para esconder / mostrar el panel ---------- */
+.panel-toggle {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 11;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 51, 85, .45);
+  background: rgba(14, 8, 10, .85);
+  backdrop-filter: blur(8px);
+  color: #f2f2f2;
+  font-size: 11px;
+  letter-spacing: .06em;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.panel-toggle:hover { background: rgba(255, 51, 85, .3); }
+.panel-toggle.open { left: calc(min(330px, 100vw - 28px) + 22px); }
+
+/* ---------- Panel ---------- */
 .panel {
   position: fixed;
   top: 14px;
   left: 14px;
-  width: min(340px, calc(100vw - 28px));
+  width: min(330px, calc(100vw - 28px));
   max-height: calc(100vh - 28px);
   overflow: auto;
   padding: 14px;
-  border: 1px solid rgba(255,255,255,.16);
+  border: 1px solid rgba(255, 51, 85, .22);
   border-radius: 12px;
-  background: rgba(8, 10, 12, .88);
-  backdrop-filter: blur(12px);
+  background: linear-gradient(180deg, rgba(14, 8, 10, .90), rgba(8, 10, 12, .90));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 30px rgba(255, 26, 64, .08), 0 10px 40px rgba(0, 0, 0, .5);
   z-index: 10;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 51, 85, .4) transparent;
 }
 
-.panel h1 { font-size: 15px; margin: 0 0 4px; color: #ff3355; }
+.panel h1 { font-family: 'Anton', Impact, sans-serif; font-weight: normal; letter-spacing: .08em; font-size: 17px; margin: 0 0 6px; color: var(--blood-soft); }
 .panel h2 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
-.panel p { font-size: 11px; line-height: 1.4; color: #c9cdd2; }
+.panel p { font-size: 11px; line-height: 1.45; color: #c9cdd2; }
 .panel .row { margin: 6px 0; }
 .panel label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
-.panel input[type="range"] { width: 100%; }
+.panel input[type="range"] { width: 100%; accent-color: var(--blood-soft); }
 .panel button {
   width: 100%;
   margin-top: 6px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: rgba(255, 255, 255, .06);
   color: inherit;
   cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
 }
-.panel button:hover { background: rgba(255,255,255,.15); }
-.panel .value { font-variant-numeric: tabular-nums; opacity: .85; }
-.panel .group { padding-top: 4px; border-top: 1px solid rgba(255,255,255,.08); }
+.panel button:hover { background: rgba(255, 51, 85, .22); border-color: rgba(255, 51, 85, .5); }
+.panel .value { font-variant-numeric: tabular-nums; opacity: .85; color: var(--blood-soft); }
+.panel .group { padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, .08); }
 .panel.hidden { display: none; }
+.panel details { margin-top: 10px; border-top: 1px solid rgba(255, 255, 255, .08); padding-top: 6px; }
+.panel summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+.panel summary:hover { opacity: 1; }
 
+/* ---------- HUD ---------- */
 .hud {
   position: fixed;
   right: 14px;
@@ -68,13 +143,17 @@ canvas { display: block; width: 100% !important; height: 100% !important; }
   z-index: 9;
   padding: 8px 12px;
   border-radius: 9px;
-  background: rgba(8,10,12,.75);
+  border: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(8, 10, 12, .72);
+  backdrop-filter: blur(6px);
   font-size: 11px;
   color: #d8dce0;
   pointer-events: none;
 }
 .hud strong { color: white; }
+.hud .mode { color: var(--blood-soft); font-weight: 600; }
 
+/* ---------- Letra en pantalla ---------- */
 .narrative-layer {
   position: fixed;
   inset: 0;
@@ -93,25 +172,20 @@ canvas { display: block; width: 100% !important; height: 100% !important; }
   font-size: 56px;
   font-weight: normal;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 0 25px rgba(0,0,0,0.95);
+  color: rgba(255, 255, 255, 0.97);
+  text-shadow: 0 0 4px rgba(0, 0, 0, .9), 0 0 32px rgba(255, 26, 64, .55), 0 0 60px rgba(0, 0, 0, .9);
   text-align: center;
   max-width: 1200px;
   padding: 0 40px;
-  transition: opacity 0.2s ease;
   opacity: 0;
+  transition: opacity 0.18s ease;
 }
 
 .lyrics-text.visible {
   opacity: 1;
+  animation: lyric-in .28s cubic-bezier(.2, .9, .3, 1) both;
 }
-/* Viñeta: oscurece los bordes para dar profundidad */
-.vignette {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 4;
-  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.65) 100%);
+@keyframes lyric-in {
+  from { transform: scale(1.14); letter-spacing: .1em; filter: blur(6px); }
+  to   { transform: scale(1);    letter-spacing: .02em; filter: blur(0); }
 }
-.panel details { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 6px; }
-.panel summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }

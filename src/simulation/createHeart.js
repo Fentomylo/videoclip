@@ -16,6 +16,7 @@ const S = 0.3;        // escala del corazón (ocupa casi todo el alto de la pant
 const CY = 0.75;      // centro vertical
 const K = S / 0.2;    // factor para los vasos, dibujados en unidades de S=0.2
 const ZC = -0.4;      // profundidad (detrás de todo)
+const BEAT_SOFT = 0.3; // qué tanto reacciona el corazón al latido (1 = como antes, 0 = no late). Sutil: lo importante es lo de adelante
 
 function mulberry32(a) {
   return function () {
@@ -135,7 +136,7 @@ export function createHeart({ renderer, scene, params, count = 14000 }) {
     const flow = vec3(cos(a), sin(a), 0.0);
 
     const rel = pos.sub(center);
-    vel.addAssign(rel.mul(params.beat.mul(params.beatStrength)).mul(dt.mul(14.0)));   // flee del centro
+    vel.addAssign(rel.mul(params.beat.mul(params.beatStrength).mul(BEAT_SOFT)).mul(dt.mul(14.0)));   // flee del centro
     vel.addAssign(steer.mul(dt.mul(16.0)));
     vel.addAssign(flow.mul(dt.mul(params.flowStrength).mul(5.0)));
     pos.addAssign(vel.mul(dt));
@@ -151,16 +152,17 @@ export function createHeart({ renderer, scene, params, count = 14000 }) {
   });
 
   const w = homeBuffer.toAttribute().w;
-  const b = params.beat.mul(params.beatStrength).clamp(0.0, 1.5);
+  const b = params.beat.mul(params.beatStrength).mul(BEAT_SOFT).clamp(0.0, 1.5);
 
   material.positionNode = positionBuffer.toAttribute();
-  material.scaleNode = float(0.075);
+  material.scaleNode = float(0.085).mul(float(1.0).add(b.mul(0.35)));   // los puntos se hinchan con el latido
   material.colorNode = Fn(() => {
     const glowC = float(1.0).sub(positionBuffer.toAttribute().sub(vec3(0.0, CY, ZC)).length().div(5.0)).clamp(0.0, 1.0);
     const k = w.mul(0.5).add(0.22).add(glowC.mul(0.18)).add(b.mul(0.45)).clamp(0.0, 1.0);
     return vec4(mix(color('#4d0010'), color('#ff1a40'), k), 1.0);
   })();
-  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5).mul(float(0.22).add(w.mul(0.3)).add(b.mul(0.2)));
+  material.opacityNode = float(1.0).sub(smoothstep(0.1, 0.5, uv().xy.sub(0.5).length()))
+    .mul(float(0.26).add(w.mul(0.34)).add(b.mul(0.3)));
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, count);
@@ -171,6 +173,7 @@ export function createHeart({ renderer, scene, params, count = 14000 }) {
   function reset() { renderer.compute(initParticles); }
   function stepSimulation() { renderer.compute(updateParticles); }
   function dispose() { geometry.dispose(); material.dispose(); scene.remove(mesh); }
+  function setActive(v) { mesh.visible = v; }
 
-  return { count, reset, stepSimulation, dispose };
+  return { count, reset, stepSimulation, dispose, setActive };
 }

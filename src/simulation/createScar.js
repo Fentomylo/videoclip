@@ -190,7 +190,7 @@ export function createScar({ renderer, scene, params, count = 3400 }) {
   })();
 
   const alpha = mix(float(0.9), smoothstep(0.0, 0.35, lifeFrac).mul(0.9), isBlood);
-  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5).mul(alpha);
+  material.opacityNode = float(1.0).sub(smoothstep(0.1, 0.5, uv().xy.sub(0.5).length())).mul(alpha);
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, count);

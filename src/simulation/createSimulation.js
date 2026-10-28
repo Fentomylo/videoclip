@@ -40,22 +40,17 @@ export function createSimulation({ renderer, scene, params, count = 2048 }) {
     // Steering de Reynolds: velocidad deseada - velocidad actual
     const seek = (dir) => safeNorm(dir).mul(params.maxSpeed).sub(vel);
 
-    // ---------- PESOS POR MODO (1 Sutura, 2 Hemorragia, 3 Disección) ----------
-    // bioMode es continuo (se interpola en main.js), así que los pesos se mezclan.
-    const m = params.bioMode;
-    const t12 = m.sub(1.0).clamp(0.0, 1.0);
-    const t23 = m.sub(2.0).clamp(0.0, 1.0);
-    const pick = (a, b, c) => mix(mix(float(a), float(b), t12), float(c), t23);
-
-    //                       Sutura  Hemorr.  Disec.
-    const wCoh    = pick(    1.6,     0.25,    0.15 ).mul(params.cohesionStrength);
-    const wAli    = pick(    1.4,     0.40,    2.20 ).mul(params.alignmentStrength);
-    const wSep    = pick(    0.8,     0.70,    2.40 );
-    const wFlow   = pick(    0.6,     1.00,    2.00 ).mul(params.flowStrength);
-    const wRadial = pick(    1.0,    -1.20,    0.40 ).mul(params.radialStrength).mul(params.radialEnabled);
-    const wVortex = pick(    0.3,     1.60,    0.00 ).mul(params.vortexStrength).mul(params.vortexEnabled);
-    const wDrag   = pick(    1.0,     0.30,    0.60 ).mul(params.dragCoefficient).mul(params.dragEnabled);
-    const percep  = pick(    2.2,     1.6,     1.4  ).mul(params.perception);
+    // ---------- PESOS DE LA HEMORRAGIA (flocking + vórtice) ----------
+    // Cohesión baja y alineación media: el enjambre se dispersa, pero el bisturí
+    // lo repele (radial negativo) y lo hace girar (vórtice).
+    const wCoh    = float(0.25).mul(params.cohesionStrength);
+    const wAli    = float(0.40).mul(params.alignmentStrength);
+    const wSep    = float(0.70);
+    const wFlow   = float(1.00).mul(params.flowStrength);
+    const wRadial = float(-1.20).mul(params.radialStrength).mul(params.radialEnabled);
+    const wVortex = float(1.60).mul(params.vortexStrength).mul(params.vortexEnabled);
+    const wDrag   = float(0.30).mul(params.dragCoefficient).mul(params.dragEnabled);
+    const percep  = float(1.6).mul(params.perception);
 
     // ---------- PERCEPCIÓN: vecindad con wrap toroidal ----------
     const cohSum = vec3(0.0).toVar();
@@ -155,7 +150,8 @@ export function createSimulation({ renderer, scene, params, count = 2048 }) {
     return vec4(mix(slow, fast, t), 1.0);
   })();
 
-  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5).mul(0.8);
+  // sprite suave: núcleo brillante + halo (con blending aditivo se funde en un resplandor)
+  material.opacityNode = float(1.0).sub(smoothstep(0.1, 0.5, uv().xy.sub(0.5).length())).mul(0.9);
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, count);
@@ -172,7 +168,8 @@ export function createSimulation({ renderer, scene, params, count = 2048 }) {
 }
 
 // =====================================================================
-//  MODO 5 · PHYSARUM (red de venas)
+//  PHYSARUM (red de venas) · CAPA DE FONDO que se activa/desactiva con la tecla 5
+//  (no es un modo: convive con cualquiera de los modos 1-4, como el corazón).
 //  Cada agente: huele el rastro con 3 sensores (izq / frente / der),
 //  gira hacia donde hay más rastro, avanza y deja rastro.
 //  El rastro se difunde y se evapora → emergen venas que se rompen y se curan.
@@ -183,7 +180,8 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
   const PW = 17.0;
   const PH = PW * GH / GW;
   const CELL = PW / GW;
-  const SPEED = 2.4;            // unidades de mundo / segundo
+  const SPEED = 3.2;            // unidades de mundo / segundo (más rápido = venas más vivas)
+  const HEART = [0.0, 0.75];    // centro del corazón de fondo: de ahí sale la onda del latido
 
   const agentPos = instancedArray(count, 'vec2');
   const agentAng = instancedArray(count, 'float');
@@ -228,9 +226,11 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
 
     // 3 sensores
     const sense = (a) => trail.element(cellOf(pos.add(vec2(cos(a), sin(a)).mul(params.sensorDist))));
+    // las ramas "respiran": el ángulo de los sensores oscila lento, así la red nunca se congela
+    const breathe = params.sensorAngle.mul(float(1.0).add(sin(timeU.mul(0.7)).mul(0.18)));
     const wF = sense(ang).toVar();
-    const wL = sense(ang.add(params.sensorAngle)).toVar();
-    const wR = sense(ang.sub(params.sensorAngle)).toVar();
+    const wL = sense(ang.add(breathe)).toVar();
+    const wR = sense(ang.sub(breathe)).toVar();
 
     const turn = params.turnRate.mul(dt);
     const steer = float(0.0).toVar();
@@ -251,7 +251,9 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
     const d = toA.div(dA);
     const crossZ = h.x.mul(d.y).sub(h.y.mul(d.x));
     const infl = float(1.0).sub(smoothstep(0.0, 4.5, dA));
-    ang.addAssign(crossZ.mul(params.radialStrength).mul(infl).mul(dt).mul(3.0));
+    // G (crecer) atrae a los agentes con fuerza, H (cortar) los ahuyenta
+    const pull = params.radialStrength.add(params.veinGrow.mul(4.0)).sub(params.veinCut.mul(4.0));
+    ang.addAssign(crossZ.mul(pull).mul(infl).mul(dt).mul(3.0));
 
     // avanzar
     pos.addAssign(vec2(cos(ang), sin(ang)).mul(dt.mul(SPEED)));
@@ -259,7 +261,8 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
     pos.y.assign(mod(pos.y.add(PH * 1.5), PH).sub(PH * 0.5));
 
     // depositar rastro
-    trail.element(cellOf(pos)).addAssign(dt.mul(10.0));
+    // con cada latido las venas depositan más: se hinchan y se encienden
+    trail.element(cellOf(pos)).addAssign(dt.mul(10.0).mul(float(1.0).add(params.beat.clamp(0.0, 1.5).mul(1.5))));
 
     pBuf.assign(pos);
     aBuf.assign(ang);
@@ -283,7 +286,9 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
     }
     const blur = sum.div(9.0);
     const blended = mix(at(0, 0), blur, 0.65);
-    const decay = max(float(1.0).sub(params.evaporation.mul(dt)), 0.0);
+    // la evaporación también oscila: la red se contrae y se expande como si respirara
+    const evap = params.evaporation.mul(float(1.0).add(sin(timeU.mul(0.5)).mul(0.3)));
+    const decay = max(float(1.0).sub(evap.mul(dt)), 0.0);
 
     // posición de la celda en el mundo
     const wx = cx.add(0.5).div(GW).sub(0.5).mul(PW);
@@ -291,7 +296,8 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
     const dA = vec2(wx, wy).sub(params.attractor.xy).length();
 
     // Intensidad de Corte: el bisturí borra el rastro a su alrededor (rompe las venas)
-    const cutAmt = abs(params.vortexStrength).div(3.0).clamp(0.0, 1.0);
+    // (H sostenida = corte total)
+    const cutAmt = max(abs(params.vortexStrength).div(3.0).clamp(0.0, 1.0), params.veinCut);
     const cutZone = float(1.0).sub(smoothstep(0.0, params.cutRadius, dA));
     const keep = float(1.0).sub(cutAmt.mul(cutZone));
 
@@ -300,7 +306,19 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
       .mul(float(1.0).sub(smoothstep(0.0, 0.5, dA)))
       .mul(dt.mul(30.0));
 
-    trailTmp.element(i).assign(blended.mul(decay).mul(keep).add(food));
+    // G sostenida: el bisturí siembra rastro en una zona ancha → brotan venas nuevas
+    const grow = params.veinGrow
+      .mul(float(1.0).sub(smoothstep(0.0, params.cutRadius, dA)))
+      .mul(dt.mul(90.0));
+
+    // Latido: una onda de rastro sale del corazón y recorre toda la red
+    const dH = vec2(wx, wy).sub(vec2(HEART[0], HEART[1])).length();
+    const ringD = dH.sub(params.veinWave);
+    const wave = exp(ringD.mul(ringD).mul(-2.5))
+      .mul(step(0.0, params.veinWave))
+      .mul(dt.mul(60.0));
+
+    trailTmp.element(i).assign(blended.mul(decay).mul(keep).add(food).add(grow).add(wave));
   })().compute(GW * GH).setName('Diffuse Trail');
 
   const copyTrail = Fn(() => {
@@ -315,7 +333,9 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
   });
 
   const v = trail.toAttribute();
-  const energy = float(1.0).sub(exp(v.mul(-0.1)));
+  const beatGlow = params.beat.clamp(0.0, 1.5);
+  // más sensible que antes (las venas se ven antes) + se enciende con el latido
+  const energy = float(1.0).sub(exp(v.mul(-0.16))).add(beatGlow.mul(0.12)).clamp(0.0, 1.0);
 
   material.positionNode = Fn(() => {
     const fi = float(instanceIndex);
@@ -327,29 +347,30 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
       0.0
     );
   })();
-  material.scaleNode = float(CELL * 1.7);
+  material.scaleNode = float(CELL * 2.3);      // sprites más grandes: venas más gruesas y continuas
+
+  // brillo que "corre" por la red: parpadeo lento distinto en cada celda (como sangre circulando)
+  const shimmer = Fn(() => {
+    const fi = float(instanceIndex);
+    return sin(timeU.mul(2.5).add(fi.mul(0.013))).mul(0.5).add(0.5);
+  })();
 
   material.colorNode = Fn(() => {
-    const lo = color('#3a0010');
+    const lo = color('#4a0010');
     const mid = color('#ff1a40');
-    const hi = color('#ffffff');
-    const c = mix(mix(lo, mid, smoothstep(0.0, 0.5, energy)), hi, smoothstep(0.6, 1.0, energy));
-    return vec4(c, 1.0);
+    const hi = color('#ffd6dc');
+    const c = mix(mix(lo, mid, smoothstep(0.0, 0.45, energy)), hi, smoothstep(0.55, 1.0, energy));
+    return vec4(c.mul(float(0.8).add(shimmer.mul(0.35))), 1.0);
   })();
-  material.opacityNode = float(1.0).sub(smoothstep(0.0, 0.5, uv().xy.sub(0.5).length())).mul(energy);
+  // es fondo: algo más tenue que los modos, pero más vivo que antes
+  material.opacityNode = float(1.0).sub(smoothstep(0.0, 0.5, uv().xy.sub(0.5).length()))
+    .mul(energy).mul(float(0.75).add(shimmer.mul(0.25)));
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, GW * GH);
   mesh.frustumCulled = false;
+  mesh.renderOrder = -2;          // detrás del corazón (-1) y de los modos
   scene.add(mesh);
-
-  // Hoja del bisturí (marcador visual)
-  const bladeGeo = new THREE.PlaneGeometry(0.05, 0.9);
-  const bladeMat = new THREE.MeshBasicNodeMaterial({ color: 0xdfe6ee, transparent: true, opacity: 0.85 });
-  const blade = new THREE.Mesh(bladeGeo, bladeMat);
-  blade.rotation.z = -0.45;
-  blade.position.z = 0.1;
-  scene.add(blade);
 
   function reset() {
     renderer.compute(clearTrail);
@@ -357,18 +378,15 @@ export function createPhysarum({ renderer, scene, params, count = 32768 }) {
   }
   function stepSimulation() {
     timeU.value += params.dt.value * params.timeScale.value;
-    blade.position.x = params.attractor.value.x + 0.2;
-    blade.position.y = params.attractor.value.y + 0.35;
     renderer.compute(stepAgents);
     renderer.compute(diffuse);
     renderer.compute(copyTrail);
   }
   function dispose() {
     geometry.dispose(); material.dispose();
-    bladeGeo.dispose(); bladeMat.dispose();
-    scene.remove(mesh); scene.remove(blade);
+    scene.remove(mesh);
   }
-  function setActive(v) { mesh.visible = v; blade.visible = v; }
+  function setActive(v) { mesh.visible = v; }
   setActive(false);
 
   return { count, reset, stepSimulation, dispose, setActive };

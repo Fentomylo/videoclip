@@ -378,7 +378,7 @@ function createShapeSystem({ renderer, scene, params, homes, motion, leaders, co
   material.scaleNode = float(size);
   const { col, alpha } = shade(homeBuffer.toAttribute());
   material.colorNode = vec4(col, 1.0);
-  material.opacityNode = step(uv().xy.sub(0.5).length(), 0.5).mul(alpha);
+  material.opacityNode = float(1.0).sub(smoothstep(0.1, 0.5, uv().xy.sub(0.5).length())).mul(alpha);
 
   const geometry = new THREE.PlaneGeometry(1, 1);
   const mesh = new THREE.InstancedMesh(geometry, material, count);

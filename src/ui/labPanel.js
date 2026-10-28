@@ -20,6 +20,8 @@ function rangeRow(parent, label, object, key, min, max, step, onInput, getValue)
     onInput?.(object[key]);
   };
   input.addEventListener('input', refresh);
+  // al soltar el slider se quita el foco: así WASD, flechas y Espacio siguen siendo del instrumento
+  input.addEventListener('change', () => input.blur());
   refresh();
   wrap.append(lab, input);
   parent.append(wrap);
@@ -53,46 +55,47 @@ function group(parent, title) {
 }
 
 export function createLabPanel({
-  params, onReset, onModeChange, onPauseChange, onBeat
+  params, onReset, onModeChange, onPauseChange, onBeat, onAll, onSpeed
 }) {
   const refreshers = [];
   const panel = document.createElement('aside');
   panel.className = 'panel';
   panel.innerHTML = `
     <h1>INSTRUMENTO · CIRUGÍA</h1>
-    <p><strong>1</strong> Hueso · <strong>2</strong> Nervios · <strong>3</strong> Hemorragia · <strong>4</strong> Cicatriz · <strong>5</strong> Physarum. <strong>WASD</strong>: Bisturí. <strong>Espacio</strong>: Latido. <strong>M</strong>: Música. <strong>Z/X/C</strong>: Letra. <strong>V</strong>: Invertir color. <strong>F</strong>: Pantalla completa.</p>
+    <p><strong>1</strong> Hueso · <strong>2</strong> Nervios · <strong>3</strong> Hemorragia · <strong>4</strong> Cicatriz · <strong>6</strong> Flores · <strong>5</strong> Venas de fondo (on/off, Physarum). <strong>T</strong>: Turbio (todos a la vez). <strong>G / H</strong> (mantener): crecer / cortar venas. <strong>WASD</strong> o mouse: Bisturí. <strong>Espacio</strong>: Latido. <strong>Q</strong>: Acelerar velocidad. <strong>M</strong>: Música. <strong>Z/X/C</strong>: Letra. <strong>V</strong>: Invertir color. <strong>F</strong>: Pantalla completa.</p>
   `;
 
-  // ---------- CORAZÓN ----------
-  const heartGroup = group(panel, 'Corazón (fondo)');
-  const strengthState = { v: params.beatStrength.value };
-  refreshers.push(rangeRow(heartGroup, 'Fuerza del latido', strengthState, 'v', 0, 3, 0.05, (v) => params.beatStrength.value = v, () => params.beatStrength.value));
-  button(heartGroup, 'Latido (Espacio)', onBeat);
-
-  // ---------- INSTRUMENTO (pocos controles expresivos) ----------
+  // ---------- INSTRUMENTO: solo 4 controles expresivos ----------
+  // Percepción (radio), regla (fuerza), regla (corte/giro) y entorno (temblor del flow field).
   const sim = group(panel, 'Bisturí y Tejido');
   const state = {
-    timeScale: params.timeScale.value,
     radialStrength: params.radialStrength.value,
     vortexStrength: params.vortexStrength.value,
     flowStrength: params.flowStrength.value
   };
-  refreshers.push(rangeRow(sim, 'Velocidad Global', state, 'timeScale', 0, 2, 0.01, (v) => params.timeScale.value = v, () => params.timeScale.value));
   refreshers.push(rangeRow(sim, 'Fuerza del Bisturí', state, 'radialStrength', -6, 6, 0.05, (v) => params.radialStrength.value = v, () => params.radialStrength.value));
   refreshers.push(rangeRow(sim, 'Intensidad de Corte / Giro', state, 'vortexStrength', -6, 6, 0.05, (v) => params.vortexStrength.value = v, () => params.vortexStrength.value));
   refreshers.push(rangeRow(sim, 'Temblor (flow field)', state, 'flowStrength', 0, 5, 0.05, (v) => params.flowStrength.value = v, () => params.flowStrength.value));
   const cutState = { cutRadius: params.cutRadius.value };
   refreshers.push(rangeRow(sim, 'Radio del Bisturí', cutState, 'cutRadius', 0.3, 3, 0.05, (v) => params.cutRadius.value = v, () => params.cutRadius.value));
+  const speedLabel = () => `⏩ Acelerar movimiento · ×${params.timeScale.value} (Q)`;
+  const speedBtn = button(sim, speedLabel(), () => onSpeed?.());
+  button(sim, 'Latido (Espacio)', onBeat);
+  button(sim, 'TURBIO · todos los instrumentos (T)', () => onAll?.());
 
   // ---------- AVANZADO (plegado) ----------
   const adv = document.createElement('details');
-  adv.innerHTML = '<summary>Avanzado (escenas 3, 4 y 5)</summary>';
+  adv.innerHTML = '<summary>Avanzado (ajuste fino)</summary>';
   panel.append(adv);
 
   const advState = {
+    timeScale: params.timeScale.value,
+    beatStrength: params.beatStrength.value,
     cohesionStrength: params.cohesionStrength.value,
     particleSize: params.particleSize.value
   };
+  refreshers.push(rangeRow(adv, 'Velocidad Global', advState, 'timeScale', 0, 3, 0.01, (v) => params.timeScale.value = v, () => params.timeScale.value));
+  refreshers.push(rangeRow(adv, 'Corazón · Fuerza del latido', advState, 'beatStrength', 0, 3, 0.05, (v) => params.beatStrength.value = v, () => params.beatStrength.value));
   refreshers.push(rangeRow(adv, 'Cohesión Celular', advState, 'cohesionStrength', 0, 3, 0.05, (v) => params.cohesionStrength.value = v, () => params.cohesionStrength.value));
   refreshers.push(rangeRow(adv, 'Grosor de Filamentos', advState, 'particleSize', 0.1, 0.6, 0.01, (v) => params.particleSize.value = v, () => params.particleSize.value));
 
@@ -128,6 +131,9 @@ export function createLabPanel({
   return {
     element: panel,
     setVisible(visible) { panel.classList.toggle('hidden', !visible); },
-    refresh() { for (const item of refreshers) item.refresh(); }
+    refresh() {
+      for (const item of refreshers) item.refresh();
+      speedBtn.textContent = speedLabel();
+    }
   };
 }

@@ -11,8 +11,12 @@ export function createParameters() {
     maxForce: uniform(14.0),
     particleSize: uniform(0.25),
 
+    // ---- CORAZÓN ----
+    beat: uniform(0.0),            // envolvente del latido (la calcula main.js)
+    beatStrength: uniform(1.0),    // cuánto se infla el corazón
+
     // 1: Sutura, 2: Hemorragia, 3: Disección (valor continuo, se interpola)
-    bioMode: uniform(1.0),
+    bioMode: uniform(2.0),
 
     // Percepción de los agentes
     perception: uniform(1.0),        // multiplicador del radio de visión de cada modo

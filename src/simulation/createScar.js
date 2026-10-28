@@ -127,18 +127,20 @@ export function createScar({ renderer, scene, params, count = 3400 }) {
       const wobble = sin(t.mul(4.0).add(home.y.mul(7.0))).mul(0.04).mul(newOpen);
       const target = home.add(vec3(side.mul(newOpen).mul(gapeMode).mul(varK), wobble, 0.0));
 
-      // resorte amortiguado hacia su posición
-      vel.addAssign(target.sub(pos).mul(60.0).mul(dt));
-      vel.mulAssign(max(float(1.0).sub(dt.mul(10.0)), 0.0));
+      // steering ARRIVE hacia su puesto (los labios se abren y vuelven a cerrar)
+      const toT = target.sub(pos);
+      const dd = toT.length();
+      const desired = toT.div(max(dd, 1e-4)).mul(5.0).mul(dd.div(0.8).clamp(0.0, 1.0));
+      vel.addAssign(desired.sub(vel).mul(dt.mul(14.0)));
       pos.addAssign(vel.mul(dt));
     }).Else(() => {
       // ================= SANGRE =================
       const life = st.x.toVar();
 
       If(life.greaterThan(0.0), () => {
-        vel.y.subAssign(params.gravity.mul(dt));
-        vel.x.addAssign(sin(t.mul(5.0).add(float(i).mul(0.37))).mul(0.6).mul(dt));
-        vel.mulAssign(max(float(1.0).sub(dt.mul(1.2)), 0.0));
+        // la sangre sigue un FLOW FIELD que cae (steering hacia la velocidad del campo)
+        const fieldDir = vec3(sin(pos.y.mul(0.9).add(t.mul(1.3)).add(pos.x.mul(0.5))).mul(0.9), params.gravity.mul(-1.0), 0.0);
+        vel.addAssign(fieldDir.sub(vel).mul(dt.mul(1.5)));
         pos.addAssign(vel.mul(dt));
         st.x.assign(life.sub(dt));
         If(pos.y.lessThan(-5.5), () => { st.x.assign(0.0); });

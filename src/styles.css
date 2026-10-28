@@ -105,3 +105,13 @@ canvas { display: block; width: 100% !important; height: 100% !important; }
 .lyrics-text.visible {
   opacity: 1;
 }
+/* Viñeta: oscurece los bordes para dar profundidad */
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.65) 100%);
+}
+.panel details { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 6px; }
+.panel summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
